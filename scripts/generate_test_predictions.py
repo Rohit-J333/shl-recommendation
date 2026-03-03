@@ -9,7 +9,7 @@ from app.services.jd_parser import parse_request
 from app.services.retriever import HybridRetriever
 from app.config import CATALOG_CSV_PATH
 
-OUTPUT_CSV = Path(__file__).parent.parent / "submission_predictions.csv"
+OUTPUT_CSV = Path(__file__).parent.parent / "Rohit_Janbandhu.csv"
 
 TEST_QUERIES = [
     "Looking to hire mid-level professionals who are proficient in Python, SQL and Java Script. Need an assessment package that can test all skills with max duration of 60 minutes.",
