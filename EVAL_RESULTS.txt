@@ -1,20 +1,27 @@
 ======================================================================
 Query                                                R@10  Pred   Rel
 ----------------------------------------------------------------------
-I am hiring for Java developers who can also collaborate eff 0.8000    10     5
-I want to hire new graduates for a sales role in my company, 0.2222    10     9
-I am looking for a COO for my company in China and I want to 0.5000    10     6
+I am hiring for Java developers who can also collaborate eff 0.6000    10     5
+I want to hire new graduates for a sales role in my company, 0.3333    10     9
+I am looking for a COO for my company in China and I want to 0.8333    10     6
 KEY RESPONSIBITILES:
-Manage the sound-scape of the station                        0.0000    10     5
-Content Writer required, expert in English and SEO.          0.2000    10     5
+Manage the sound-scape of the station                        0.6000    10     5
+Content Writer required, expert in English and SEO.          0.6000    10     5
 Find me 1 hour long assesment for the below job at SHL
-Job D                                                        0.1111    10     9
-ICICI Bank Assistant Admin, Experience required 0-2 years, t 0.5000    10     6
-We're looking for a Marketing Manager who can drive Recro's  0.0000    10     5
-Based on the JD below recommend me assessment for the Consul 0.0000    10     5
-I want to hire a Senior Data Analyst with 5 years of experie 0.3000    10    10
+Job D                                                        0.3333    10     9
+ICICI Bank Assistant Admin, Experience required 0-2 years, t 0.6667    10     6
+We're looking for a Marketing Manager who can drive Recro's  0.4000    10     5
+Based on the JD below recommend me assessment for the Consul 0.4000    10    10
+I want to hire a Senior Data Analyst with 5 years of experie 0.4000    10    10
 ======================================================================
-Mean Recall@10:                                    0.2633
+Mean Recall@10:                                    0.5767
 ======================================================================
 
-Config: dense=0.6, bm25=0.4, candidate_size=100, llm_rerank=True (gemini-2.5-flash), llm_window=30
+Config: dense=0.6, bm25=0.4, candidate_size=100, llm_rerank=True (gemini-2.5-flash), llm_window=50
+Fix: DOMAIN_BOOST slugs corrected + boosted candidates injected at TOP of LLM window
+
+Improvement history:
+  Baseline (Gemini embeddings)            : 0.0644
+  Phase 1: URL normalization              : 0.1944
+  Phase 2: Weight tuning + LLM window    : 0.2633
+  Phase 3: Domain boost fix + top-inject : 0.5767  ← current

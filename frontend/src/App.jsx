@@ -320,7 +320,7 @@ export default function App() {
       )}
 
       <footer className="footer">
-        <p>Powered by Gemini 1.5 Flash · FAISS · BM25 · FastAPI · React</p>
+        <p>Powered by Gemini 2.5 Flash · FAISS · BM25 · FastAPI · React</p>
         <p style={{ marginTop: '6px' }}>SHL Assessment Recommendation System &copy; 2025</p>
       </footer>
     </div>

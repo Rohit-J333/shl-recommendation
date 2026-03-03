@@ -24,10 +24,21 @@ Return ONLY a valid JSON object (no markdown) with this structure:
   "seniority": "<entry|mid|senior|executive>",
   "hard_skills": ["<skill1>", "<skill2>"],
   "soft_skills": ["<skill1>", "<skill2>"],
-  "domain": "<tech|sales|hr|finance|marketing|operations|general>",
+  "domain": "<tech|sales|hr|finance|marketing|media|operations|consultant|general>",
   "duration_constraint_minutes": <number or null>,
   "canonical_query": "<concise 2-3 sentence query capturing role, skills, and constraints>"
 }}
+
+Domain selection guide:
+- tech: software engineering, IT, data science, developer roles
+- sales: sales, business development, account management
+- hr: human resources, recruiting, L&D, I/O psychology, talent management, consulting firms
+- finance: accounting, finance, banking, investment roles
+- marketing: marketing, brand, advertising, content, SEO roles
+- media: radio, broadcast, journalism, TV, film, communications
+- operations: operations, supply chain, logistics, admin support
+- consultant: management consulting, strategy, advisory, professional services
+- general: anything else
 
 Job description/query:
 {text}

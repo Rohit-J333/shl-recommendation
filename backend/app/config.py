@@ -27,15 +27,30 @@ MIN_RECOMMENDATIONS = 1
 
 # K/P balance thresholds
 TECH_KEYWORDS = [
+    # Languages & frameworks
     "java", "python", "sql", "javascript", "typescript", "react", "node",
-    "developer", "engineer", "programmer", "coder", "coding", "database",
-    "api", "backend", "frontend", "devops", "cloud", "aws", "selenium",
-    "html", "css", "data analyst", "data scientist", "machine learning",
-    "software", "testing", "qa", "automation"
+    "html", "css", "c#", "c++", "kotlin", "swift", "golang", "rust",
+    # Roles
+    "developer", "engineer", "coder", "coding", "software",
+    # Infrastructure / cloud
+    "database", "api", "backend", "frontend", "devops", "cloud", "aws",
+    "docker", "kubernetes", "ci/cd",
+    # Testing
+    "selenium", "testing", "qa", "automation", "playwright",
+    # Data / ML
+    "data analyst", "data scientist", "machine learning", "deep learning",
+    "tableau", "power bi", "powerbi", "excel", "pandas", "numpy",
+    # Business tools
+    "jira", "confluence", "salesforce", "sap", "oracle", "erp", "crm",
+    "sdlc", "agile", "scrum",
+    # Note: "programming" intentionally excluded — too ambiguous
+    # (e.g. "music programming", "radio programming" are not tech roles)
 ]
 SOFT_KEYWORDS = [
     "collaborate", "communication", "team", "leadership", "management",
     "interpersonal", "stakeholder", "culture", "personality", "behavior",
     "sales", "customer", "service", "emotional", "empathy", "verbal",
-    "written", "presentation", "relationship", "influence", "negotiation"
+    "written", "presentation", "relationship", "influence", "negotiation",
+    "media", "content", "editorial", "brand", "marketing", "creative",
+    "community", "radio", "broadcast", "journalism",
 ]

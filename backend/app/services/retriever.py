@@ -18,21 +18,37 @@ logger = logging.getLogger(__name__)
 
 RERANK_PROMPT = """You are a senior SHL assessment consultant. Given a hiring query and candidate assessments, return the {k} MOST RELEVANT assessments, ranked best to worst.
 
-RULES (strictly follow):
-1. **Exact skill match first**: If query names specific tools/languages (Java, SQL, Python, Selenium, Excel), prioritize assessments whose name directly matches. A "Core Java" test beats a generic cognitive test for a Java role.
-2. **K/P balance when both needed**: If query has BOTH technical skills AND soft skills (communication, collaboration, leadership), ensure mix of K-type (Knowledge) and P-type (Personality) in results — at least 2 of each.
-3. **Leadership/executive queries**: If query is about senior role, COO, executive, cultural fit, or leadership — prioritize personality/leadership reports (OPQ, Leadership Report, Global Skills) over technical tests.
-4. **Duration constraint**: If query gives a time limit ("40 minutes", "1 hour"), exclude or deprioritize assessments far outside that range.
-5. **Cognitive + personality for analyst/consultant roles**: If query is about analyst, consultant, or problem-solving roles without specific tech tools, include BOTH cognitive (Verify Numerical, Verify Verbal, Inductive Reasoning) AND personality (OPQ32r) tests.
+RULES (apply ALL that are relevant):
+
+1. **Exact skill match first**: If query names specific tools/languages (Java, SQL, Python, JavaScript, Selenium, Excel, Tableau, SDLC, Jira), prioritize assessments whose name DIRECTLY includes that technology. "Core Java" beats generic cognitive for a Java role; "SQL Server" beats verbal reasoning for a SQL role.
+
+2. **K/P balance for mixed roles**: If query mentions BOTH technical skills AND people skills (communication, collaboration, leadership, team), include a MIX — at least 2 Knowledge/Skills (K-type) AND at least 2 Personality (P-type) assessments.
+
+3. **Leadership / executive roles**: If query mentions COO, VP, Director, CXO, Head of, senior leadership, cultural fit, or executive — PRIORITIZE: OPQ32r, Leadership Reports, Enterprise Leadership Report, Global Skills Assessment. These outrank technical tests for this query type.
+
+4. **Analyst / consultant / finance roles**: If query mentions analyst, consultant, finance, accounting, or problem-solving WITHOUT specific tech tools — include: (a) Verify Verbal Ability, (b) Verify Numerical Ability or Inductive Reasoning, AND (c) OPQ32r personality. These three together are the SHL standard for professional roles.
+
+5. **Media / communications / content / marketing roles**: If query mentions media, radio, broadcast, journalism, content writing, SEO, social media, brand, community, or communications — PRIORITIZE: Verify Verbal Ability, English Comprehension, Interpersonal Communications, OPQ32r, and any domain-specific test (Marketing, Digital Advertising, Written English). Verbal and comprehension tests are critical for these roles.
+
+6. **Writing / editorial roles**: If query mentions writing, copy, editorial, SEO, blog, email writing, or content creation — include: Written English, Email Writing, English Comprehension, Verify Verbal Ability. These are the most relevant SHL tests.
+
+7. **Customer service / support roles**: If query mentions customer service, support, call center, helpdesk, or English communication — include: Spoken English (SVAR), English Comprehension, Interpersonal Communications, Verify Verbal Ability.
+
+8. **Sales / business development roles**: For sales roles (especially entry-level or graduate) — include Entry Level Sales assessments, Business Communication, Verbal Ability, and OPQ32r personality tests.
+
+9. **Duration constraint**: If query states a time limit (e.g., "max 40 minutes", "less than 30 minutes", "1 hour"), EXCLUDE assessments that clearly exceed that limit based on their duration_minutes value. If duration_minutes is null/unknown, keep the assessment but note the constraint.
+
+10. **General management roles (no specific tech)**: For any management, supervisory, or professional role not covered by rules 1-9 — include OPQ32r personality AND at least one cognitive test (Verify Verbal Ability, Verify Numerical Ability, or Inductive Reasoning). Every professional role benefits from personality + cognitive assessment.
 
 Query: {query}
 
 Candidates (JSON):
 {candidates}
 
-Return ONLY a valid JSON array of exactly {k} objects with "url" and "explanation" fields:
-[{{"url": "url1", "explanation": "One sentence reason."}}, ...]
-No markdown, no extra text. Exactly {k} items.
+Return ONLY a valid JSON array of exactly {k} objects with "url" and "explanation" fields.
+Each explanation must be ONE concise sentence explaining WHY this specific assessment is relevant to THIS specific query:
+[{{"url": "https://...", "explanation": "One sentence reason specific to the query."}}, ...]
+No markdown fences, no extra text. Exactly {k} items.
 """
 
 FALLBACK_EXPLANATION_PROMPT = """Given this hiring query and assessment, write ONE sentence (max 20 words) explaining why this assessment is relevant.
@@ -103,37 +119,37 @@ class HybridRetriever:
     def _enforce_kp_balance(self, candidates: list[dict], needs_tech: bool, needs_soft: bool) -> list[dict]:
         """
         If query needs both tech and soft skills, ensure at least 2 K-type and 2 P-type
-        appear in the top results. Reorders if necessary.
+        appear at the TOP of the candidate list (for the LLM to consider), without
+        discarding the rest of the pool. Returns the full reordered candidate list.
         """
         if not (needs_tech and needs_soft):
             return candidates
 
         k_items = [c for c in candidates if "K" in c.get("test_type", [])]
         p_items = [c for c in candidates if "P" in c.get("test_type", [])]
-        other_items = [c for c in candidates if c not in k_items and c not in p_items]
 
         target_k = min(3, len(k_items))
         target_p = min(3, len(p_items))
 
-        # Build balanced list: alternate K and P, fill rest from other/remaining
-        balanced = []
+        # Build a priority front section: alternate K and P
+        priority = []
         ki, pi = 0, 0
-        while len(balanced) < MAX_RECOMMENDATIONS:
+        while True:
             added = False
-            if ki < target_k and ki < len(k_items):
-                balanced.append(k_items[ki]); ki += 1; added = True
-            if pi < target_p and pi < len(p_items):
-                balanced.append(p_items[pi]); pi += 1; added = True
+            if ki < target_k:
+                priority.append(k_items[ki]); ki += 1; added = True
+            if pi < target_p:
+                priority.append(p_items[pi]); pi += 1; added = True
             if not added:
                 break
 
-        # Add remaining items from candidates not already in balanced
-        in_balanced = {c["url"] for c in balanced}
+        # Append ALL remaining candidates (preserving their order) after priority items
+        in_priority = {c["url"] for c in priority}
         for c in candidates:
-            if c["url"] not in in_balanced and len(balanced) < MAX_RECOMMENDATIONS:
-                balanced.append(c)
+            if c["url"] not in in_priority:
+                priority.append(c)
 
-        return balanced[:MAX_RECOMMENDATIONS]
+        return priority  # Full list — LLM will select top MAX_RECOMMENDATIONS from this
 
     def _llm_rerank(self, query_text: str, candidates: list[dict], k: int) -> list[dict]:
         """Use Gemini Flash to rerank top-20 candidates and attach per-item explanations."""
@@ -146,7 +162,7 @@ class HybridRetriever:
                 "duration_minutes": c.get("duration_minutes"),
                 "description": (c.get("description") or "")[:200],
             }
-            for c in candidates[:30]
+            for c in candidates[:50]
         ]
 
         prompt = RERANK_PROMPT.format(
@@ -212,6 +228,78 @@ class HybridRetriever:
                     c.setdefault("_explanation", "")
                 return candidates
 
+    # Seniority → URL slug keywords to boost in candidate pool
+    SENIORITY_BOOST = {
+        "executive": ["leadership-report", "opq", "enterprise-leadership", "global-skills", "executive-scenarios", "hipo"],
+        "senior":    ["professional-7-1", "professional-7-0", "opq"],
+    }
+    # Domain → URL slug keywords to ensure appear in candidate pool
+    # Slugs are matched as substrings of the catalog item's URL (lowercase), so
+    # use the exact URL fragment as it appears in the catalog.
+    DOMAIN_BOOST = {
+        "media":          ["verify-verbal", "english-comprehension", "interpersonal", "marketing-new",
+                           "opq", "shl-verify-interactive-inductive"],
+        "marketing":      ["verify-verbal", "digital-advertising", "marketing-new", "manager-8-0",
+                           "opq", "writex", "written-english", "excel-365-essentials",
+                           "shl-verify-interactive-inductive"],
+        "hr":             ["opq", "verify-verbal", "verify-numerical", "interpersonal",
+                           "professional", "administrative"],
+        "finance":        ["shl-verify-interactive-numerical", "verify-numerical", "financial",
+                           "excel", "opq", "professional"],
+        "sales":          ["entry-level-sales", "business-communication", "opq", "verify-verbal",
+                           "interpersonal", "svar"],
+        "operations":     ["verify-numerical", "verify-verbal", "opq", "professional"],
+        "general":        ["opq", "verify-verbal", "verify-numerical"],
+        "consultant":     ["verify-verbal-next-generation", "shl-verify-interactive-numerical",
+                           "administrative-professional", "opq", "professional-7-1",
+                           "verify-verbal"],
+        "consulting":     ["verify-verbal-next-generation", "shl-verify-interactive-numerical",
+                           "administrative-professional", "opq", "professional-7-1",
+                           "verify-verbal"],
+        "tech":           ["verify-numerical", "professional", "verify-verbal"],
+        "technology":     ["verify-numerical", "professional", "verify-verbal"],
+    }
+
+    def _inject_domain_boost(self, candidates: list[dict], parsed_jd: dict) -> list[dict]:
+        """
+        Ensure key domain/seniority assessments are present in the candidate pool.
+        Fetches them from the full catalog and injects at the end with a small score
+        so they're available to the LLM reranker even if they missed hybrid retrieval.
+        """
+        seniority = parsed_jd.get("seniority", "mid").lower()
+        domain = parsed_jd.get("domain", "general").lower()
+
+        boost_slugs = []
+        boost_slugs.extend(self.SENIORITY_BOOST.get(seniority, []))
+        boost_slugs.extend(self.DOMAIN_BOOST.get(domain, []))
+
+        if not boost_slugs:
+            return candidates
+
+        existing_urls = {c["url"].lower() for c in candidates}
+        min_score = min((c.get("_score", 0.0) for c in candidates), default=0.0)
+        inject_score = max(0.0, min_score * 0.5)  # inject below last candidate
+
+        injected = []
+        for item in self.catalog:
+            url_lower = item["url"].lower()
+            if url_lower in existing_urls:
+                continue
+            if any(slug in url_lower for slug in boost_slugs):
+                copy = dict(item)
+                copy["_score"] = inject_score
+                copy.setdefault("_explanation", "")
+                injected.append(copy)
+                existing_urls.add(url_lower)
+
+        if injected:
+            logger.info(f"Domain/seniority boost injected {len(injected)} candidates (domain={domain}, seniority={seniority})")
+            # Inject boosted items at the TOP so they fall within the LLM reranker's
+            # top-50 candidate window, rather than being buried below position 100.
+            candidates = injected + candidates
+
+        return candidates
+
     def retrieve(
         self,
         query_vec: np.ndarray,
@@ -224,9 +312,10 @@ class HybridRetriever:
         1. FAISS top-CANDIDATE_SIZE
         2. BM25 top-CANDIDATE_SIZE
         3. Weighted merge with constraint-aware scoring
-        4. K/P balance enforcement
-        5. LLM reranking (attaches explanation per item)
-        6. Return top MAX_RECOMMENDATIONS with _score and _explanation fields
+        4. Domain/seniority boost injection
+        5. K/P balance enforcement
+        6. LLM reranking (attaches explanation per item)
+        7. Return top MAX_RECOMMENDATIONS with _score and _explanation fields
         """
         query_tokens = self._tokenize(query_text)
 
@@ -267,12 +356,18 @@ class HybridRetriever:
             candidates.append(item_copy)
             score_map[item["url"]] = round(float(final_score), 4)
 
-        # Step 4: K/P balance
+        # Step 4: Domain/seniority boost
+        candidates = self._inject_domain_boost(candidates, parsed_jd)
+        # Update score_map with injected items
+        for c in candidates:
+            score_map.setdefault(c["url"], c.get("_score", 0.0))
+
+        # Step 5: K/P balance
         needs_tech = parsed_jd.get("needs_tech", False)
         needs_soft = parsed_jd.get("needs_soft", False)
         candidates = self._enforce_kp_balance(candidates, needs_tech, needs_soft)
 
-        # Step 5: LLM reranking (also attaches _explanation)
+        # Step 6: LLM reranking (also attaches _explanation)
         if use_llm_rerank and len(candidates) > MIN_RECOMMENDATIONS:
             candidates = self._llm_rerank(
                 parsed_jd.get("canonical_query", query_text),
