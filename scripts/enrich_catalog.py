@@ -1,13 +1,3 @@
-"""
-Enrich catalog_clean.csv with real descriptions and duration data
-scraped from individual SHL product pages.
-
-Handles:
-- Removing navigation/header garbage from descriptions
-- Multiple fallback selectors for description text
-- Duration extraction via regex on page text
-- Resumable: prints progress, can be re-run safely
-"""
 import csv
 import re
 import time
@@ -33,7 +23,6 @@ HEADERS = {
     "Accept-Language": "en-US,en;q=0.5",
 }
 
-# Nav/menu text markers that indicate scraped garbage
 NAV_MARKERS = [
     "careers", "our culture", "join shl", "practice tests",
     "contact us", "sign in", "log in", "our teams", "our people",
@@ -46,17 +35,12 @@ def clean_text(text: str) -> str:
 
 
 def looks_like_nav(text: str) -> bool:
-    """Return True if text looks like scraped navigation/footer, not a description."""
     t = text.lower()
     hits = sum(1 for m in NAV_MARKERS if m in t)
     return hits >= 2
 
 
 def extract_detail(url: str) -> tuple[str, int | None]:
-    """
-    Fetch a product page and return (description, duration_minutes).
-    Returns ("", None) on failure.
-    """
     try:
         resp = requests.get(url, headers=HEADERS, timeout=15)
         resp.raise_for_status()
@@ -66,14 +50,11 @@ def extract_detail(url: str) -> tuple[str, int | None]:
 
     soup = BeautifulSoup(resp.text, "html.parser")
 
-    # Remove nav/header/footer noise before any text extraction
     for tag in soup.find_all(["nav", "header", "footer", "script", "style"]):
         tag.decompose()
 
-    # ── Description extraction ──────────────────────────────────────────────
     description = ""
 
-    # Priority selectors (SHL uses different class names across product pages)
     desc_selectors = [
         ".product-hero__description",
         ".product-hero__content > p",
@@ -93,7 +74,6 @@ def extract_detail(url: str) -> tuple[str, int | None]:
                 description = text[:700]
                 break
 
-    # Fallback: first substantive paragraph in main content
     if not description:
         main = (
             soup.find("main")
@@ -107,16 +87,13 @@ def extract_detail(url: str) -> tuple[str, int | None]:
                 description = text[:700]
                 break
 
-    # ── Duration extraction ─────────────────────────────────────────────────
     duration = None
     full_text = clean_text(soup.get_text())
 
+
     duration_patterns = [
-        # "Approximate Completion Time: 20 minutes" or "Duration: 25 mins"
         r"(?:approximate(?:ly)?[:\s]+)?(?:completion\s+time|duration|time(?:\s+to\s+complete)?)[:\s]+(\d+)(?:\s*[-–]\s*\d+)?\s*(?:minutes?|mins?)",
-        # "20-25 minutes to complete"
         r"(\d+)(?:\s*[-–]\s*\d+)?\s*(?:minutes?|mins?)\s*(?:to\s+complete|completion|untimed)?",
-        # "approximately 30 minutes"
         r"approximately\s+(\d+)\s*(?:minutes?|mins?)",
     ]
 
@@ -132,7 +109,6 @@ def extract_detail(url: str) -> tuple[str, int | None]:
 
 
 def enrich():
-    # Load catalog
     with open(CATALOG_CSV, newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
 
@@ -157,12 +133,9 @@ def enrich():
 
         if dur is not None:
             row["duration_minutes"] = str(dur)
-        # Keep existing duration if we couldn't extract a new one
-        # (don't overwrite known values)
 
-        time.sleep(0.4)  # polite crawl delay
+        time.sleep(0.4)
 
-        # Save checkpoint every 50 rows
         if (i + 1) % 50 == 0 or (i + 1) == len(rows):
             with open(CATALOG_CSV, "w", newline="", encoding="utf-8") as f:
                 writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -170,7 +143,6 @@ def enrich():
                 writer.writerows(rows)
             logger.info(f"  Checkpoint saved. enriched={enriched}, failed={failed}")
 
-    # Final save
     with open(CATALOG_CSV, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -178,7 +150,6 @@ def enrich():
 
     logger.info(f"\nDone. {enriched}/{len(rows)} got descriptions, {failed} empty/failed")
 
-    # Stats
     with_desc = sum(1 for r in rows if r.get("description", "").strip())
     with_dur = sum(1 for r in rows if r.get("duration_minutes", "").strip().isdigit())
     logger.info(f"Final: {with_desc} descriptions, {with_dur} durations")

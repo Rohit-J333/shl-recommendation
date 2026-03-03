@@ -1,6 +1,3 @@
-"""
-Hybrid Retriever: BM25 + FAISS dense search + LLM reranking via Gemini.
-"""
 import json
 import logging
 import re
@@ -60,17 +57,10 @@ Return ONLY the explanation sentence.
 
 class HybridRetriever:
     def __init__(self, catalog: list[dict], faiss_index):
-        """
-        catalog: list of assessment dicts with keys:
-            id, name, url, description, test_type, remote_testing,
-            adaptive_irt, duration_minutes, embedding_text
-        faiss_index: loaded FAISS index (ntotal == len(catalog))
-        """
         self.catalog = catalog
         self.faiss_index = faiss_index
         self.url_to_item = {item["url"]: item for item in catalog}
 
-        # Build BM25 index over embedding_text
         logger.info("Building BM25 index...")
         corpus = [
             self._tokenize(item.get("embedding_text", f"{item['name']} {item.get('description','')}"))
@@ -88,27 +78,24 @@ class HybridRetriever:
         return re.findall(r"\w+", text)
 
     def _dense_search(self, query_vec: np.ndarray, k: int) -> list[tuple[int, float]]:
-        """Return [(catalog_idx, score)] for top-k dense results."""
         scores, indices = self.faiss_index.search(query_vec, k)
         return list(zip(indices[0].tolist(), scores[0].tolist()))
 
     def _bm25_search(self, query_tokens: list[str], k: int) -> list[tuple[int, float]]:
-        """Return [(catalog_idx, normalized_score)] for top-k BM25 results."""
         scores = self.bm25.get_scores(query_tokens)
         top_k_indices = np.argsort(scores)[::-1][:k]
         max_score = scores[top_k_indices[0]] if scores[top_k_indices[0]] > 0 else 1.0
         return [(int(idx), float(scores[idx]) / max_score) for idx in top_k_indices]
 
     def _duration_penalty(self, item: dict, constraint_minutes: Optional[int]) -> float:
-        """Return a penalty [0,1] based on duration mismatch."""
         if constraint_minutes is None:
             return 0.0
         item_dur = item.get("duration_minutes")
         if item_dur is None:
-            return 0.0  # unknown duration — no penalty
+            return 0.0
         diff = abs(item_dur - constraint_minutes)
         if diff <= 10:
-            return 0.0  # perfect match
+            return 0.0
         elif diff <= 25:
             return 0.05
         elif diff <= 60:
@@ -117,11 +104,6 @@ class HybridRetriever:
             return 0.30
 
     def _enforce_kp_balance(self, candidates: list[dict], needs_tech: bool, needs_soft: bool) -> list[dict]:
-        """
-        If query needs both tech and soft skills, ensure at least 2 K-type and 2 P-type
-        appear at the TOP of the candidate list (for the LLM to consider), without
-        discarding the rest of the pool. Returns the full reordered candidate list.
-        """
         if not (needs_tech and needs_soft):
             return candidates
 
@@ -131,7 +113,6 @@ class HybridRetriever:
         target_k = min(3, len(k_items))
         target_p = min(3, len(p_items))
 
-        # Build a priority front section: alternate K and P
         priority = []
         ki, pi = 0, 0
         while True:
@@ -143,16 +124,14 @@ class HybridRetriever:
             if not added:
                 break
 
-        # Append ALL remaining candidates (preserving their order) after priority items
         in_priority = {c["url"] for c in priority}
         for c in candidates:
             if c["url"] not in in_priority:
                 priority.append(c)
 
-        return priority  # Full list — LLM will select top MAX_RECOMMENDATIONS from this
+        return priority
 
     def _llm_rerank(self, query_text: str, candidates: list[dict], k: int) -> list[dict]:
-        """Use Gemini Flash to rerank top-20 candidates and attach per-item explanations."""
         client = google_genai.Client(api_key=GEMINI_API_KEY)
         candidate_data = [
             {
@@ -170,9 +149,7 @@ class HybridRetriever:
             candidates=json.dumps(candidate_data, indent=2),
             k=min(k, len(candidates)),
         )
-        # Add a manual retry loop for 429 errors from free tier Gemini
         max_retries = 5
-        # Build normalized URL lookup (strip trailing slash, lowercase)
         url_to_candidate = {c["url"].strip().rstrip("/").lower(): c for c in candidates}
         result = []
         
@@ -189,7 +166,6 @@ class HybridRetriever:
                     raise ValueError("LLM returned non-list")
                 
                 for obj in ranked_objects:
-                    # Support both {url, explanation} objects and bare strings (fallback)
                     if isinstance(obj, dict):
                         url = obj.get("url", "")
                         explanation = obj.get("explanation", "")
@@ -201,11 +177,10 @@ class HybridRetriever:
                     norm_url = url.strip().rstrip("/").lower()
                     cand = url_to_candidate.get(norm_url)
                     if cand:
-                        item = dict(cand)  # copy
+                        item = dict(cand)
                         item["_explanation"] = explanation
                         result.append(item)
 
-                # Add any missed candidates without explanation
                 seen = {c["url"].strip().rstrip("/").lower() for c in result}
                 for c in candidates:
                     if c["url"].strip().rstrip("/").lower() not in seen and len(result) < MAX_RECOMMENDATIONS:
@@ -215,7 +190,6 @@ class HybridRetriever:
                 return result
 
             except Exception as e:
-                # If we hit a rate limit, sleep and retry
                 if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
                     if attempt < max_retries - 1:
                         sleep_time = 15 * (attempt + 1)
@@ -228,14 +202,10 @@ class HybridRetriever:
                     c.setdefault("_explanation", "")
                 return candidates
 
-    # Seniority → URL slug keywords to boost in candidate pool
     SENIORITY_BOOST = {
         "executive": ["leadership-report", "opq", "enterprise-leadership", "global-skills", "executive-scenarios", "hipo"],
         "senior":    ["professional-7-1", "professional-7-0", "opq"],
     }
-    # Domain → URL slug keywords to ensure appear in candidate pool
-    # Slugs are matched as substrings of the catalog item's URL (lowercase), so
-    # use the exact URL fragment as it appears in the catalog.
     DOMAIN_BOOST = {
         "media":          ["verify-verbal", "english-comprehension", "interpersonal", "marketing-new",
                            "opq", "shl-verify-interactive-inductive"],
@@ -261,11 +231,6 @@ class HybridRetriever:
     }
 
     def _inject_domain_boost(self, candidates: list[dict], parsed_jd: dict) -> list[dict]:
-        """
-        Ensure key domain/seniority assessments are present in the candidate pool.
-        Fetches them from the full catalog and injects at the end with a small score
-        so they're available to the LLM reranker even if they missed hybrid retrieval.
-        """
         seniority = parsed_jd.get("seniority", "mid").lower()
         domain = parsed_jd.get("domain", "general").lower()
 
@@ -278,7 +243,7 @@ class HybridRetriever:
 
         existing_urls = {c["url"].lower() for c in candidates}
         min_score = min((c.get("_score", 0.0) for c in candidates), default=0.0)
-        inject_score = max(0.0, min_score * 0.5)  # inject below last candidate
+        inject_score = max(0.0, min_score * 0.5)
 
         injected = []
         for item in self.catalog:
@@ -294,8 +259,6 @@ class HybridRetriever:
 
         if injected:
             logger.info(f"Domain/seniority boost injected {len(injected)} candidates (domain={domain}, seniority={seniority})")
-            # Inject boosted items at the TOP so they fall within the LLM reranker's
-            # top-50 candidate window, rather than being buried below position 100.
             candidates = injected + candidates
 
         return candidates
@@ -307,27 +270,14 @@ class HybridRetriever:
         parsed_jd: dict,
         use_llm_rerank: bool = True,
     ) -> list[dict]:
-        """
-        Main retrieval pipeline:
-        1. FAISS top-CANDIDATE_SIZE
-        2. BM25 top-CANDIDATE_SIZE
-        3. Weighted merge with constraint-aware scoring
-        4. Domain/seniority boost injection
-        5. K/P balance enforcement
-        6. LLM reranking (attaches explanation per item)
-        7. Return top MAX_RECOMMENDATIONS with _score and _explanation fields
-        """
         query_tokens = self._tokenize(query_text)
 
-        # Step 1: Dense search
         dense_results = self._dense_search(query_vec, CANDIDATE_SIZE)
         dense_map = {idx: score for idx, score in dense_results}
 
-        # Step 2: BM25 search
         bm25_results = self._bm25_search(query_tokens, CANDIDATE_SIZE)
         bm25_map = {idx: score for idx, score in bm25_results}
 
-        # Step 3: Merge candidates with scores
         all_idxs = set(dense_map.keys()) | set(bm25_map.keys())
         scored = []
         duration_constraint = parsed_jd.get("duration_constraint")
@@ -343,10 +293,8 @@ class HybridRetriever:
             final_score = max(0.0, hybrid_score - penalty)
             scored.append((final_score, item))
 
-        # Sort descending
         scored.sort(key=lambda x: x[0], reverse=True)
 
-        # Attach _score to each candidate
         candidates = []
         score_map = {}
         for final_score, item in scored[:CANDIDATE_SIZE]:
@@ -356,18 +304,14 @@ class HybridRetriever:
             candidates.append(item_copy)
             score_map[item["url"]] = round(float(final_score), 4)
 
-        # Step 4: Domain/seniority boost
         candidates = self._inject_domain_boost(candidates, parsed_jd)
-        # Update score_map with injected items
         for c in candidates:
             score_map.setdefault(c["url"], c.get("_score", 0.0))
 
-        # Step 5: K/P balance
         needs_tech = parsed_jd.get("needs_tech", False)
         needs_soft = parsed_jd.get("needs_soft", False)
         candidates = self._enforce_kp_balance(candidates, needs_tech, needs_soft)
 
-        # Step 6: LLM reranking (also attaches _explanation)
         if use_llm_rerank and len(candidates) > MIN_RECOMMENDATIONS:
             candidates = self._llm_rerank(
                 parsed_jd.get("canonical_query", query_text),
@@ -375,12 +319,10 @@ class HybridRetriever:
                 MAX_RECOMMENDATIONS,
             )
 
-        # Restore scores (LLM rerank changes order but not original hybrid scores)
         for c in candidates:
             if "_score" not in c or c["_score"] == 0.0:
                 c["_score"] = score_map.get(c["url"], 0.0)
 
-        # Final deduplicate and slice
         seen_urls = set()
         final = []
         for c in candidates:

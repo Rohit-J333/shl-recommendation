@@ -77,26 +77,22 @@ function AssessmentCard({ item, rank }) {
       )}
 
       <div className="card-meta">
-        {/* Test types */}
         {testTypes.map((t) => (
           <span key={t} className={getBadgeClass(t)}>
             {t === 'K' ? '🧠 Knowledge & Skills' : t === 'P' ? '💬 Personality' : `📌 ${t}`}
           </span>
         ))}
 
-        {/* Duration */}
         {item.duration_minutes && (
           <span className="badge badge-duration">
             ⏱ {item.duration_minutes} min
           </span>
         )}
 
-        {/* Remote */}
         {item.remote_testing && (
           <span className="badge badge-remote">✅ Remote Testing</span>
         )}
 
-        {/* Adaptive */}
         {item.adaptive_irt && (
           <span className="badge badge-remote">⚡ Adaptive IRT</span>
         )}
@@ -160,7 +156,6 @@ export default function App() {
 
   return (
     <div className="app">
-      {/* ── Hero ── */}
       <header className="hero">
         <div className="hero-badge">
           <span className="hero-badge-dot" />
@@ -173,9 +168,7 @@ export default function App() {
         </p>
       </header>
 
-      {/* ── Form Card ── */}
       <div className="form-card">
-        {/* Input type tabs */}
         <div className="tab-row">
           {[
             { id: 'query', label: '✍️ Quick Query' },
@@ -192,7 +185,6 @@ export default function App() {
           ))}
         </div>
 
-        {/* ── Query input ── */}
         {tab === 'query' && (
           <>
             <label className="form-label">Hiring Query</label>
@@ -206,7 +198,6 @@ export default function App() {
           </>
         )}
 
-        {/* ── JD text input ── */}
         {tab === 'jd' && (
           <>
             <label className="form-label">Job Description Text</label>
@@ -221,7 +212,6 @@ export default function App() {
           </>
         )}
 
-        {/* ── URL input ── */}
         {tab === 'url' && (
           <>
             <label className="form-label">Job Description URL</label>
@@ -235,7 +225,6 @@ export default function App() {
           </>
         )}
 
-        {/* ── K/P Balance Slider ── */}
         <div className="balance-row">
           <label className="form-label">Assessment Balance</label>
           <input
@@ -252,7 +241,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* ── Actions ── */}
         <div className="submit-row">
           <button
             style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', fontSize: '13px' }}
@@ -280,14 +268,12 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Error ── */}
       {error && (
         <div className="error-banner">
           ⚠️ {error}
         </div>
       )}
 
-      {/* ── Results ── */}
       {results !== null && (
         results.length === 0 ? (
           <div className="empty-state">
@@ -310,7 +296,6 @@ export default function App() {
         )
       )}
 
-      {/* ── Empty state hero ── */}
       {results === null && !loading && (
         <div className="empty-state">
           <div className="empty-icon">🎯</div>

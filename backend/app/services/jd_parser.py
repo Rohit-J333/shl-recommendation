@@ -1,7 +1,3 @@
-"""
-JD Parser Service: handles plain query, raw JD text, and URL inputs.
-Uses trafilatura for URL extraction + Gemini 1.5 Flash for structured summarization.
-"""
 import logging
 import json
 import re
@@ -50,14 +46,12 @@ def get_gemini_client():
 
 
 def fetch_url_text(url: str) -> str:
-    """Fetch and extract main text from a URL using trafilatura."""
     try:
         resp = requests.get(url, headers=HEADERS, timeout=10)
         resp.raise_for_status()
         text = trafilatura.extract(resp.text, include_comments=False, include_tables=False)
         if text:
-            return text[:5000]  # cap length
-        # fallback: raw stripped HTML text
+            return text[:5000]
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(resp.text, "html.parser")
         return soup.get_text(separator=" ", strip=True)[:5000]
@@ -67,7 +61,6 @@ def fetch_url_text(url: str) -> str:
 
 
 def parse_with_llm(text: str) -> dict:
-    """Use Gemini Flash to extract structured JD fields."""
     prompt = JD_PARSE_PROMPT.format(text=text[:3000])
     max_retries = 5
     for attempt in range(max_retries):
@@ -78,7 +71,6 @@ def parse_with_llm(text: str) -> dict:
                 contents=prompt,
             )
             content = response.text.strip()
-            # Strip markdown code fences if present
             content = re.sub(r"```(?:json)?\n?", "", content).strip().rstrip("```").strip()
             parsed = json.loads(content)
             return parsed
@@ -110,20 +102,6 @@ def parse_request(
     jd_text: Optional[str] = None,
     jd_url: Optional[str] = None,
 ) -> dict:
-    """
-    Process input and return a unified dict:
-    {
-      raw_text: str,        # original input text
-      canonical_query: str, # enriched query for embedding/BM25
-      hard_skills: list,
-      soft_skills: list,
-      duration_constraint: int | None,
-      needs_tech: bool,
-      needs_soft: bool,
-      seniority: str,
-    }
-    """
-    # Step 1: get raw text
     raw_text = ""
     if jd_url:
         logger.info(f"Fetching JD from URL: {jd_url}")
@@ -140,12 +118,10 @@ def parse_request(
     if not raw_text:
         raise ValueError("No input provided. Supply query, jd_text, or jd_url.")
 
-    # Step 2: LLM structural parse
     parsed = {}
-    if len(raw_text) > 50:  # only for substantial text
+    if len(raw_text) > 50:
         parsed = parse_with_llm(raw_text)
 
-    # Step 3: build canonical query
     canonical = parsed.get("canonical_query", "")
     if not canonical:
         canonical = raw_text[:500]

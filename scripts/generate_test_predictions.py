@@ -1,7 +1,3 @@
-"""
-Generate submission_predictions.csv for the 9 unlabeled queries in the Test-Set.
-Matches format required in Appendix 3.
-"""
 import sys
 import csv
 from pathlib import Path
@@ -78,7 +74,6 @@ def main():
         except Exception as e:
             print(f"  Error on query {i}: {e}")
             
-    # Write to final format
     with open(OUTPUT_CSV, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=["Query", "Assessment_url"])
         writer.writeheader()

@@ -1,8 +1,3 @@
-"""
-SHL Assessment Recommendation System
-Crawler: Scrapes the SHL product catalog for Individual Test Solutions.
-Uses the verified HTML structure from live site inspection.
-"""
 import requests
 from bs4 import BeautifulSoup
 import json
@@ -26,13 +21,11 @@ HEADERS = {
 DATA_DIR = Path(__file__).parent.parent / "data"
 DATA_DIR.mkdir(exist_ok=True)
 
-# Verified: SHL catalog has exactly 377 Individual Test Solutions across 32 pages
 PAGE_SIZE = 12
-TOTAL_PAGES = 32  # confirmed from pagination bar
+TOTAL_PAGES = 32
 
 
 def fetch_page(start: int, type_filter: int = 1, retries: int = 3) -> str | None:
-    """Fetch a catalog page with retry logic."""
     params = {"start": start, "type": type_filter}
     for attempt in range(retries):
         try:
@@ -47,26 +40,15 @@ def fetch_page(start: int, type_filter: int = 1, retries: int = 3) -> str | None
 
 
 def parse_catalog_page(html: str) -> list[dict]:
-    """
-    Parse a catalog page using verified SHL HTML structure:
-    - Table rows: tr[data-course-id]
-    - Name/URL: td.custom__table-heading__title > a
-    - Remote/Adaptive: td.custom__table-heading__general > span.catalogue__circle
-      ('-yes' class = True, '-no' class = False)
-    - Test types: td .product-catalogue__keys > span.product-catalogue__key
-    """
     soup = BeautifulSoup(html, "html.parser")
     assessments = []
 
-    # Find all assessment rows
     rows = soup.select("tr[data-course-id]")
     if not rows:
-        # fallback: look inside custom__table-responsive
         rows = soup.select(".custom__table-responsive tr")
 
     for row in rows:
         try:
-            # Name and URL
             name_el = row.select_one("td.custom__table-heading__title a")
             if not name_el:
                 continue
@@ -76,7 +58,6 @@ def parse_catalog_page(html: str) -> list[dict]:
                 continue
             url = href if href.startswith("http") else f"https://www.shl.com{href}"
 
-            # Remote testing: first td.custom__table-heading__general span
             general_cells = row.select("td.custom__table-heading__general")
             remote_testing = False
             adaptive_irt = False
@@ -89,18 +70,16 @@ def parse_catalog_page(html: str) -> list[dict]:
                 circle = general_cells[1].select_one("span.catalogue__circle")
                 adaptive_irt = circle is not None and "-yes" in circle.get("class", [])
 
-            # Test types: span.product-catalogue__key
             type_spans = row.select("span.product-catalogue__key")
             test_types = [s.get_text(strip=True) for s in type_spans if s.get_text(strip=True)]
 
-            # Duration: look for a cell with numeric minutes
             duration = None
             for cell in row.select("td"):
                 text = cell.get_text(strip=True)
                 m = re.match(r"^(\d+)\s*$", text)
                 if m:
                     val = int(m.group(1))
-                    if 5 <= val <= 180:  # reasonable test duration range
+                    if 5 <= val <= 180:
                         duration = val
                         break
 
@@ -123,13 +102,11 @@ def parse_catalog_page(html: str) -> list[dict]:
 
 
 def scrape_detail_page(url: str) -> dict:
-    """Scrape an individual assessment page for description text."""
     try:
         resp = requests.get(url, headers=HEADERS, timeout=12)
         resp.raise_for_status()
         soup = BeautifulSoup(resp.text, "html.parser")
 
-        # Try common description selectors
         desc = ""
         for selector in [
             ".product-hero__description",
@@ -151,7 +128,6 @@ def scrape_detail_page(url: str) -> dict:
 
 
 def scrape_all() -> list[dict]:
-    """Scrape all 377 Individual Test Solutions across 32 pages."""
     logger.info("Starting SHL catalog scrape (Individual Test Solutions, type=1)...")
     all_assessments = []
     seen_urls = set()
@@ -183,11 +159,10 @@ def scrape_all() -> list[dict]:
             logger.info("No new items — catalog exhausted")
             break
 
-        time.sleep(0.5)  # polite delay
+        time.sleep(0.5)
 
     logger.info(f"Scraped {len(all_assessments)} unique assessments total")
 
-    # Enrich first 60 with detail page descriptions
     logger.info("Enriching first 60 items with detail page descriptions...")
     for i, a in enumerate(all_assessments[:60]):
         detail = scrape_detail_page(a["url"])
@@ -200,13 +175,10 @@ def scrape_all() -> list[dict]:
 
 
 def save_data(assessments: list[dict]):
-    """Save to CSV, JSON, and SQLite."""
-    # JSON
     json_path = DATA_DIR / "catalog_raw.json"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(assessments, f, indent=2, ensure_ascii=False)
 
-    # CSV
     csv_path = DATA_DIR / "catalog_clean.csv"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=[
@@ -227,7 +199,6 @@ def save_data(assessments: list[dict]):
             })
     logger.info(f"Saved {len(assessments)} rows to {csv_path}")
 
-    # SQLite
     db_path = DATA_DIR / "shl_catalog.db"
     conn = sqlite3.connect(str(db_path))
     conn.execute("""

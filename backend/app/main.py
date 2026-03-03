@@ -1,7 +1,3 @@
-"""
-FastAPI app — SHL Assessment Recommendation System
-Endpoints: GET /health, POST /recommend
-"""
 import logging
 import csv
 import time
@@ -25,13 +21,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Global state — loaded once at startup
 retriever: HybridRetriever = None
 catalog: list[dict] = []
 
 
 def load_catalog_from_csv() -> list[dict]:
-    """Load catalog assessments from the cleaned CSV file."""
     items = []
     with open(CATALOG_CSV_PATH, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -56,9 +50,6 @@ def load_catalog_from_csv() -> list[dict]:
 
 
 def load_or_build_index(catalog_items: list[dict]):
-    """Load existing FAISS index or build it from embeddings.
-    Rebuilds if cached index has wrong dimension or wrong item count.
-    """
     from app.services.embedder import EMBED_DIM
     index = load_index()
     if index is not None and index.ntotal == len(catalog_items) and index.d == EMBED_DIM:
@@ -77,9 +68,8 @@ def load_or_build_index(catalog_items: list[dict]):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Load retrieval artifacts at startup."""
     global retriever, catalog
-    logger.info("🚀 Starting SHL Recommendation API...")
+    logger.info("Starting SHL Recommendation API...")
 
     try:
         catalog = load_catalog_from_csv()
@@ -95,9 +85,9 @@ async def lifespan(app: FastAPI):
         configure_gemini()
         faiss_index = load_or_build_index(catalog)
         retriever = HybridRetriever(catalog, faiss_index)
-        logger.info("✅ Retriever ready")
+        logger.info("Retriever ready")
 
-    yield  # app runs here
+    yield
 
     logger.info("Shutting down...")
 
@@ -120,16 +110,11 @@ app.add_middleware(
 
 @app.get("/health", response_model=HealthResponse, tags=["health"])
 async def health_check():
-    """Simple health check — returns ok if API is running."""
     return HealthResponse(status="ok")
 
 
 @app.post("/recommend", response_model=RecommendResponse, tags=["recommend"])
 async def recommend(request: Request, body: RecommendRequest):
-    """
-    Recommend SHL assessments for a query, JD text, or JD URL.
-    Returns 1–10 ranked Individual Test Solutions.
-    """
     start_time = time.perf_counter()
 
     if not retriever:
@@ -145,7 +130,6 @@ async def recommend(request: Request, body: RecommendRequest):
         )
 
     try:
-        # Parse JD / query
         parsed = parse_request(
             query=body.query,
             jd_text=body.jd_text,
@@ -158,10 +142,7 @@ async def recommend(request: Request, body: RecommendRequest):
         raise HTTPException(status_code=500, detail="Failed to parse input.")
 
     try:
-        # Embed the canonical query
         query_vec = embed_query(parsed["canonical_query"])
-
-        # Retrieve
         results = retriever.retrieve(
             query_vec=query_vec,
             query_text=parsed["canonical_query"],
@@ -174,7 +155,7 @@ async def recommend(request: Request, body: RecommendRequest):
 
     latency_ms = int((time.perf_counter() - start_time) * 1000)
     top_urls = [r["url"] for r in results[:5]]
-    logger.info(f"[{latency_ms}ms] query={parsed['canonical_query'][:60]}... → top5={top_urls}")
+    logger.info(f"[{latency_ms}ms] query={parsed['canonical_query'][:60]}... top5={top_urls}")
 
     recommendations = [
         AssessmentRecommendation(

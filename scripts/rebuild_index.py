@@ -1,7 +1,3 @@
-"""
-Rebuilds the FAISS index and embeddings for the updated catalog.
-Run this after adding new assessments to catalog_clean.csv.
-"""
 import sys
 import csv
 from pathlib import Path
