@@ -12,6 +12,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Pre-download sentence-transformer model so it's baked into the image
+# (avoids HuggingFace download on first request which causes Render timeout)
+RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+
 # Copy app code preserving backend/ directory so config.py path resolution works:
 # config.py is at /app/backend/app/config.py → .parent.parent.parent = /app → /app/data/ ✓
 COPY backend/app/ ./backend/app/
