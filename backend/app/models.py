@@ -1,6 +1,3 @@
-"""
-Pydantic models for API request/response — matches Appendix 2 exactly.
-"""
 from pydantic import BaseModel, field_validator
 from typing import Optional
 
@@ -23,17 +20,17 @@ class RecommendRequest(BaseModel):
 
 class AssessmentRecommendation(BaseModel):
     assessment_name: str
-    assessment_url: str              # Appendix 2: assessment_url (not url)
+    assessment_url: str
     score: float = 0.0
-    test_type: str                   # Appendix 2: single string e.g. "K" or "P"
-    duration_minutes: Optional[int] = None   # Appendix 2: duration_minutes
+    test_type: str
+    duration_minutes: Optional[int] = None
     remote_testing: bool = False
     adaptive_irt: bool = False
     explanation: str = ""
 
 
 class RecommendResponse(BaseModel):
-    recommendations: list[AssessmentRecommendation]   # Appendix 2: recommendations
+    recommendations: list[AssessmentRecommendation]
 
 
 class HealthResponse(BaseModel):
