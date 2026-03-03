@@ -1,0 +1,12 @@
+.venv/
+node_modules/
+frontend/node_modules/
+frontend/dist/
+*.pyc
+__pycache__/
+.env
+*.txt
+!backend/requirements.txt
+*.xlsx
+*.pdf
+data/shl_catalog.db

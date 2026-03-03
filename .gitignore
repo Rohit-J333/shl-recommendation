@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Claude Code
+.claude/
+
+# Environment
+.env
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Large auto-generated files (keep catalog_clean.csv, faiss.index, embeddings.npy)
+data/shl_catalog.db
+data/catalog_raw.json
+
+# Logs and debug
+backend_log.txt
+debug_output.txt
+diag_*.txt
+output*.txt
+gen_output.txt
