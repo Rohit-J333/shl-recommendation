@@ -12,8 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app code and pre-built data artifacts
-COPY backend/app/ ./app/
+# Copy app code preserving backend/ directory so config.py path resolution works:
+# config.py is at /app/backend/app/config.py → .parent.parent.parent = /app → /app/data/ ✓
+COPY backend/app/ ./backend/app/
 COPY data/catalog_clean.csv ./data/catalog_clean.csv
 COPY data/faiss.index ./data/faiss.index
 COPY data/embeddings.npy ./data/embeddings.npy
@@ -21,5 +22,6 @@ COPY data/embeddings.npy ./data/embeddings.npy
 # Expose port
 EXPOSE 8000
 
-# Run with uvicorn
+# Run from /app/backend so uvicorn finds the `app` package
+WORKDIR /app/backend
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
