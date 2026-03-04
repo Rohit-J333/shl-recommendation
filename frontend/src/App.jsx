@@ -144,7 +144,7 @@ export default function App() {
       setLoadingMsg('Analyzing...')
       const { data } = await axios.post(`${API_BASE}/recommend`, body, {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 120000,
+        timeout: 240000,
       })
       setResults(data.recommendations || [])
     } catch (err) {
