@@ -115,6 +115,7 @@ export default function App() {
   const [jdUrl, setJdUrl] = useState('')
   const [balance, setBalance] = useState(50)
   const [loading, setLoading] = useState(false)
+  const [loadingMsg, setLoadingMsg] = useState('Analyzing...')
   const [results, setResults] = useState(null)
   const [error, setError] = useState('')
 
@@ -136,9 +137,14 @@ export default function App() {
     else if (tab === 'url') body.jd_url = jdUrl.trim()
 
     try {
+      // Pre-ping health to wake Render free tier (cold start can take 30-60s)
+      setLoadingMsg('Waking up server...')
+      try { await axios.get(`${API_BASE}/health`, { timeout: 30000 }) } catch (_) {}
+
+      setLoadingMsg('Analyzing...')
       const { data } = await axios.post(`${API_BASE}/recommend`, body, {
         headers: { 'Content-Type': 'application/json' },
-        timeout: 60000,
+        timeout: 120000,
       })
       setResults(data.recommendations || [])
     } catch (err) {
@@ -146,6 +152,7 @@ export default function App() {
       setError(`Request failed: ${msg}`)
     } finally {
       setLoading(false)
+      setLoadingMsg('Analyzing...')
     }
   }, [tab, query, jdText, jdUrl])
 
@@ -257,7 +264,7 @@ export default function App() {
             {loading ? (
               <>
                 <div className="spinner" />
-                Analyzing...
+                {loadingMsg}
               </>
             ) : (
               <>
